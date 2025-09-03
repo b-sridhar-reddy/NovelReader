@@ -25,10 +25,28 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 
+    <!-- Fallback functions for external resource failures -->
+    <script>
+        // Fallback functions for external resource failures
+        function loadFallback(href) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            document.head.appendChild(link);
+            document.getElementById('fallbackMsg').classList.add('show');
+        }
+
+        function loadFallbackFont() {
+            // Fallback web fonts or system fonts
+            document.documentElement.style.setProperty('--reader-font-family', 'serif');
+            document.getElementById('fallbackMsg').classList.add('show');
+        }
+    </script>
+
     <!-- External dependencies with integrity checks and fallbacks -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
-          crossorigin="anonymous" onerror="this.onerror=null; loadFallback('../css/bootstrap-fallback.css')">
+          crossorigin="anonymous" onerror="this.onerror=null; loadFallback('css/bootstrap-fallback.css')">
 
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,12 +54,12 @@
           rel="stylesheet" onerror="this.onerror=null; loadFallbackFont()">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-          integrity="sha384-ZTfMH8Xz/rmFScagTTGQCsqmwAM+J8VaAeHyESgNxhkskOVsGn8Jrf4urGYYwK9J"
-          crossorigin="anonymous" onerror="this.onerror=null; loadFallback('../css/fontawesome-fallback.css')">
+          integrity="sha384-blOohCVdhjmtROpu8+CfTnUWham9nkX7P7OZQMst+RUnhtoY/9qemFAkIKOYxDI3"
+          crossorigin="anonymous" onerror="this.onerror=null; loadFallback('css/fontawesome-fallback.css')">
 
     <!-- DOMPurify for XSS protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"
-            integrity="sha384-QcDKJzsMpqqCwkMhKsM8J3Vsu8YXLTwjEbUTgGxDMlT68GN1iZjJQz6ltpVBFOcx"
+            integrity="sha384-cwS6YdhLI7XS60eoDiC+egV0qHp8zI+Cms46R0nbn8JrmoAzV9uFL60etMZhAnSu"
             crossorigin="anonymous"></script>
 
     <!-- Custom styles -->
@@ -170,21 +188,6 @@
     <script src="reader.js"></script>
 
     <script>
-        // Fallback functions for external resource failures
-        function loadFallback(href) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = href;
-            document.head.appendChild(link);
-            document.getElementById('fallbackMsg').classList.add('show');
-        }
-
-        function loadFallbackFont() {
-            // Fallback web fonts or system fonts
-            document.documentElement.style.setProperty('--reader-font-family', 'serif');
-            document.getElementById('fallbackMsg').classList.add('show');
-        }
-
         // Check if DOMPurify loaded
         if (typeof DOMPurify === 'undefined') {
             alert('Security library failed to load. Some features may not work properly.\nPlease refresh the page or check your connection.');

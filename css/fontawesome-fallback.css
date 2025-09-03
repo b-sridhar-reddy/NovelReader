@@ -1,0 +1,113 @@
+/* Font Awesome fallback - essential icons for Novel Reader */
+
+@font-face {
+    font-family: 'Font Awesome 6 Free';
+    font-style: normal;
+    font-weight: 900;
+    font-display: swap;
+    src: url("data:font/woff2;base64,d09GMgABAAAAAHLUAA8AAAAABnwAAAWwAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0ZGVE0cGvIgE2aMPgSCTAEGAE2iMGpBAASQgAABBgqAzgBIwgEIAWGzgA2ZeCKWo62/3v/V+uQXxLDQAJ6DJLFUyjob4qtjalqjO9zJ8H7PXPXv7sBhMcQijEJGYAQgAA") format('woff2');
+}
+
+@font-face {
+    font-family: 'Font Awesome 6 Free';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("data:font/woff2;base64,d09GMgABAAAAAHLUAA8AAAAABnwAAAWwAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0ZGVE0cGvIgE2aMPgSCTAEGAE2iMGpBAASQgAABBgqAzgBIwgEIAWGzgA2ZeCKWo62/3v/V+uQXxLDQAJ6DJLFUyjob4qtjalqjO9zJ8H7PXPXv7sBhMcQijEJGYAQgAA") format('woff2');
+}
+
+.fas, .far, .fal, .fad, .fab {
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+    display: inline-block;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    line-height: 1;
+}
+
+/* Core Reader Icons */
+.fa-bars:before {
+    content: "\f0c9";
+}
+
+.fa-chevron-left:before {
+    content: "\f053";
+}
+
+.fa-chevron-right:before {
+    content: "\f054";
+}
+
+.fa-download:before {
+    content: "\f019";
+}
+
+.fa-cog:before {
+    content: "\f013";
+}
+
+.fa-cloud-upload-alt:before {
+    content: "\f382";
+}
+
+/* File Upload Icon */
+.fa-cloud-upload-alt {
+    font-size: inherit;
+    color: inherit;
+}
+
+/* Navigation Icons */
+.fa-bars,
+.fa-chevron-left,
+.fa-chevron-right {
+    color: inherit;
+}
+
+/* Settings Icon */
+.fa-cog {
+    color: inherit;
+}
+
+/* Download Icon */
+.fa-download {
+    color: inherit;
+}
+
+/* Basic styling for all FA icons */
+.fas,
+.far {
+    display: inline;
+    width: auto;
+    height: auto;
+    line-height: inherit;
+    margin: 0;
+    padding: 0;
+}
+
+/* Dropdown indicator */
+.dropdown-toggle::after {
+    content: "\f107";
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    border: none;
+    vertical-align: middle;
+    margin-left: 0.5em;
+}
+
+/* Make sure icons don't interfere with layout */
+.fas:before,
+.far:before,
+.fal:before,
+.fad:before,
+.fab:before {
+    display: inline;
+}
+
+/* Ensure proper spacing */
+.btn-control .fas,
+.btn-control .far {
+    margin: 0;
+}
