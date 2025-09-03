@@ -28,7 +28,18 @@ const CONFIG = {
     THEMES: ['light', 'dark', 'sepia'],
     FONTS: ['serif', 'sans', 'mono'],
     DEBOUNCE_DELAY: 200,
-    NOTIFICATION_DURATION: 3000
+    NOTIFICATION_DURATION: 3000,
+    MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB limit
+    ALLOWED_MIME_TYPES: ['text/html', 'application/xhtml+xml'],
+    SANITIZE_CONFIG: {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'strike', 'sub', 'sup',
+                      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'q',
+                      'ol', 'ul', 'li', 'dl', 'dt', 'dd',
+                      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                      'a', 'img', 'div', 'span', 'pre', 'code'],
+        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id'],
+        ALLOW_DATA_ATTR: false
+    }
 };
 
 const MESSAGES = {
@@ -72,6 +83,8 @@ class NovelReader {
             chapterList: document.getElementById('chapterList'),
             chapterContent: document.getElementById('chapterContent'),
             chapterTitle: document.getElementById('chapterTitle'),
+            chapterProgress: document.getElementById('chapterProgress'),
+            chapterProgressBar: document.getElementById('chapterProgressBar'),
             fileUploadArea: document.getElementById('fileUploadArea'),
             fileInput: document.getElementById('fileInput'),
             sidebarToggle: document.getElementById('sidebarToggle'),
@@ -90,615 +103,354 @@ class NovelReader {
      */
     async init() {
         try {
-            this.bindEvents();
+            this.setupEventListeners();
+            this.loadBookmarks();
             this.applySettings();
             this.isInitialized = true;
             console.info('Novel Reader initialized successfully');
         } catch (error) {
-            console.error('Failed to initialize Novel Reader:', error);
-            this.showNotification('Failed to initialize application', 5000);
+            this.handleError(error, 'Initialization');
         }
     }
 
     /**
-     * Bind all event listeners
+     * Set up all event listeners
      */
-    bindEvents() {
-        const { fileUploadArea, fileInput, sidebarToggle, prevChapter, nextChapter,
-                fontSizeSlider, chapterList, chapterContent } = this.domElements;
-
+    setupEventListeners() {
         // File upload events
-        fileUploadArea.addEventListener('click', () => fileInput.click());
-        fileUploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
-        fileUploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
-        fileUploadArea.addEventListener('drop', this.handleFileDrop.bind(this));
-        fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+        this.domElements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        this.domElements.fileUploadArea.addEventListener('click', () => this.domElements.fileInput.click());
+        this.domElements.fileUploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
+        this.domElements.fileUploadArea.addEventListener('drop', (e) => this.handleDrop(e));
 
         // Navigation events
-        sidebarToggle.addEventListener('click', this.toggleSidebar.bind(this));
-        prevChapter.addEventListener('click', () => this.goToChapter(this.currentChapter - 1));
-        nextChapter.addEventListener('click', () => this.goToChapter(this.currentChapter + 1));
+        this.domElements.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+        this.domElements.prevChapter.addEventListener('click', () => this.previousChapter());
+        this.domElements.nextChapter.addEventListener('click', () => this.nextChapter());
+        this.domElements.exportBtn.addEventListener('click', () => this.exportNovel());
 
         // Settings events
-        this.domElements.themeButtons.forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.setTheme(e.target.dataset.theme);
-            });
+        this.domElements.fontSizeSlider.addEventListener('input', (e) => this.updateFontSize(e.target.value));
+        this.domElements.themeButtons.forEach(button => {
+            button.addEventListener('click', (e) => this.setTheme(e.target.dataset.theme));
+        });
+        this.domElements.fontButtons.forEach(button => {
+            button.addEventListener('click', (e) => this.setFont(e.target.dataset.font));
         });
 
-        this.domElements.fontButtons.forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.setFont(e.target.dataset.font);
-            });
-        });
-
-        fontSizeSlider.addEventListener('input', (e) => this.setFontSize(e.target.value));
-
-        // Other events
-        this.domElements.exportBtn.addEventListener('click', this.exportNovel.bind(this));
-        chapterList.addEventListener('click', this.handleChapterClick.bind(this));
-        chapterContent.addEventListener('scroll', this.handleScroll.bind(this));
+        // Scroll events
+        this.domElements.chapterContent.addEventListener('scroll', () => this.handleScroll());
 
         // Keyboard shortcuts
-        document.addEventListener('keydown', this.handleKeyboard.bind(this));
+        document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+
+        // Window events
+        window.addEventListener('beforeunload', () => this.saveProgress());
     }
 
-    // File handling methods
+    /**
+     * Handle file selection
+     */
+    async handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+            await this.processFile(file);
+        }
+    }
+
+    /**
+     * Handle drag over event
+     */
     handleDragOver(event) {
         event.preventDefault();
+        event.stopPropagation();
         this.domElements.fileUploadArea.classList.add('dragover');
     }
 
-    handleDragLeave(event) {
+    /**
+     * Handle drop event
+     */
+    async handleDrop(event) {
         event.preventDefault();
+        event.stopPropagation();
         this.domElements.fileUploadArea.classList.remove('dragover');
-    }
 
-    handleFileDrop(event) {
-        event.preventDefault();
-        this.domElements.fileUploadArea.classList.remove('dragover');
         const files = event.dataTransfer.files;
         if (files.length > 0) {
-            this.processFile(files[0]);
-        }
-    }
-
-    handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (file) {
-            this.processFile(file);
+            const file = files[0];
+            if (this.validateFile(file)) {
+                await this.processFile(file);
+            }
         }
     }
 
     /**
-     * Process uploaded HTML file
+     * Validate file type and size
+     */
+    validateFile(file) {
+        if (!CONFIG.ALLOWED_MIME_TYPES.includes(file.type)) {
+            this.showNotification(MESSAGES.FILE_TYPE_ERROR);
+            return false;
+        }
+
+        if (file.size > CONFIG.MAX_FILE_SIZE) {
+            this.showNotification('File too large. Maximum size is 10MB.');
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Process the uploaded file
      */
     async processFile(file) {
         try {
-            if (!file.type.includes('html') && !file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
-                throw new Error(MESSAGES.FILE_TYPE_ERROR);
+            this.showLoadingState('Processing novel...');
+            
+            const text = await this.readFileAsText(file);
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
+            
+            if (doc.querySelector('parsererror')) {
+                throw new Error('Invalid HTML format');
             }
 
-            this.showLoadingState('Processing file...');
+            const chapters = this.extractChapters(doc);
+            if (chapters.length === 0) {
+                throw new Error('No chapters found in the file');
+            }
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const content = e.target.result;
-                    this.novelData = this.parseNovelHTML(content);
-
-                    // Switch to reader mode
-                    this.showReaderInterface();
-                    // Load first chapter
-                    this.displayChapter(0);
-                    // Load saved progress
-                    this.loadReadingProgress();
-
-                    console.info('Novel loaded successfully:', this.novelData.title);
-                } catch (error) {
-                    console.error('Parse error:', error);
-                    this.showNotification(MESSAGES.PARSE_ERROR);
-                } finally {
-                    this.hideLoadingState();
-                }
+            this.novelData = {
+                title: doc.title || file.name.replace(/\.html?$/i, ''),
+                chapters: chapters,
+                fileName: file.name
             };
 
-            reader.readAsText(file);
-        } catch (error) {
-            console.error('File processing error:', error);
-            this.showNotification(error.message || MESSAGES.PARSE_ERROR);
+            this.currentChapter = 0;
+            this.currentPosition = 0;
+            
+            this.populateChapterList();
+            this.displayChapter(0);
+            this.showReaderInterface();
+            
             this.hideLoadingState();
+            this.showNotification('Novel loaded successfully!');
+            
+        } catch (error) {
+            this.hideLoadingState();
+            this.handleError(error, 'File Processing');
         }
     }
 
     /**
-     * Parse HTML content to extract chapters
+     * Read file as text
      */
-    parseNovelHTML(htmlContent) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, 'text/html');
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
 
-        // Extract chapters from common patterns
+    /**
+     * Extract chapters from HTML document
+     */
+    extractChapters(doc) {
         const chapters = [];
-
+        
+        // Try different selectors to find chapters
         for (const selector of CONFIG.SELECTORS) {
             const elements = doc.querySelectorAll(selector);
             if (elements.length > 0) {
-                elements.forEach((el, index) => {
-                    const title = el.querySelector('h1,h2,h3,h4')?.textContent?.trim() ||
-                                  `Chapter ${index + 1}`;
-                    const content = el.innerHTML;
-
-                    if (title && content) {
-                        chapters.push({
-                            id: index + 1,
-                            title: title,
-                            content: this.sanitizeContent(content)
-                        });
-                    }
+                elements.forEach((element, index) => {
+                    const title = this.extractChapterTitle(element, index);
+                    const content = this.sanitizeContent(element.innerHTML);
+                    
+                    chapters.push({
+                        title: title,
+                        content: content,
+                        element: element
+                    });
                 });
-                break; // Break after finding chapters with first matching selector
+                
+                if (chapters.length > 0) break;
             }
         }
 
-        // Fallback: Extract entire body content as single chapter
+        // If no chapters found, treat entire body as one chapter
         if (chapters.length === 0) {
             const body = doc.body || doc.querySelector('body');
             if (body) {
                 chapters.push({
-                    id: 1,
-                    title: doc.title?.trim() || 'Novel Content',
-                    content: this.sanitizeContent(body.innerHTML)
+                    title: 'Chapter 1',
+                    content: this.sanitizeContent(body.innerHTML),
+                    element: body
                 });
             }
         }
 
-        return {
-            title: doc.title?.trim() || 'Untitled Novel',
-            chapters: chapters,
-            metadata: {
-                originalTitle: doc.title,
-                sourceFile: 'uploaded.html',
-                parsedAt: new Date().toISOString()
-            }
-        };
+        return chapters;
     }
 
     /**
-     * Sanitize HTML content for safe rendering
+     * Extract chapter title from element
      */
-    sanitizeContent(content) {
-        // Basic content sanitization - can be enhanced with DOMPurify
-        return content
-            .replace(/<script[^>]*>.*?<\/script>/gi, '')
-            .trim();
+    extractChapterTitle(element, index) {
+        // Try to find heading elements
+        const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        if (headings.length > 0) {
+            return headings[0].textContent.trim();
+        }
+
+        // Try to find title in data attributes or id
+        const titleAttr = element.getAttribute('data-title') || 
+                         element.getAttribute('title') ||
+                         element.id;
+        
+        if (titleAttr) {
+            return titleAttr.replace(/[-_]/g, ' ').trim();
+        }
+
+        // Default title
+        return `Chapter ${index + 1}`;
     }
 
     /**
-     * Switch to reader interface
+     * Sanitize HTML content
      */
-    showReaderInterface() {
-        this.domElements.uploadSection.classList.add('hidden');
-        this.domElements.readerSection.classList.remove('hidden');
-
-        // Populate table of contents
-        this.buildTableOfContents();
+    sanitizeContent(html) {
+        if (typeof DOMPurify !== 'undefined') {
+            return DOMPurify.sanitize(html, CONFIG.SANITIZE_CONFIG);
+        }
+        
+        // Fallback sanitization
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        
+        // Remove script tags and other potentially dangerous elements
+        const dangerous = div.querySelectorAll('script, style, iframe, object, embed');
+        dangerous.forEach(el => el.remove());
+        
+        return div.innerHTML;
     }
 
     /**
-     * Build table of contents
+     * Populate the chapter list in sidebar
      */
-    buildTableOfContents() {
-        const { chapterList } = this.domElements;
-        chapterList.innerHTML = '';
+    populateChapterList() {
+        if (!this.novelData) return;
 
-        if (!this.novelData?.chapters) return;
-
-        const fragment = document.createDocumentFragment();
-
+        this.domElements.chapterList.innerHTML = '';
+        
         this.novelData.chapters.forEach((chapter, index) => {
             const li = document.createElement('li');
             li.className = 'chapter-item';
-
-            const link = document.createElement('a');
-            link.href = '#';
-            link.className = 'chapter-link';
-            link.dataset.chapter = index;
-            link.textContent = chapter.title;
-            link.title = chapter.title; // Tooltip for long titles
-
-            li.appendChild(link);
-            fragment.appendChild(li);
+            li.innerHTML = `
+                <a href="#" class="chapter-link" data-chapter="${index}">
+                    ${this.escapeHtml(chapter.title)}
+                </a>
+            `;
+            
+            li.querySelector('.chapter-link').addEventListener('click', (e) => {
+                e.preventDefault();
+                this.displayChapter(index);
+            });
+            
+            this.domElements.chapterList.appendChild(li);
         });
-
-        chapterList.appendChild(fragment);
     }
 
     /**
-     * Navigate to specific chapter
+     * Display a specific chapter
      */
-    goToChapter(index) {
-        if (!this.novelData?.chapters) return;
-
-        if (index >= 0 && index < this.novelData.chapters.length) {
-            this.currentChapter = index;
-            this.displayChapter(index);
-            this.updateUI();
+    displayChapter(chapterIndex) {
+        if (!this.novelData || chapterIndex < 0 || chapterIndex >= this.novelData.chapters.length) {
+            return;
         }
-    }
 
-    /**
-     * Display specific chapter
-     */
-    displayChapter(index) {
-        const chapter = this.novelData.chapters[index];
-        if (!chapter) return;
-
+        this.currentChapter = chapterIndex;
+        const chapter = this.novelData.chapters[chapterIndex];
+        
+        // Update UI
         this.domElements.chapterTitle.textContent = chapter.title;
         this.domElements.chapterContent.innerHTML = chapter.content;
-
-        // Update active state in TOC
-        this.updateActiveChapter(index);
-
-        // Reset scroll position for new chapter
-        this.domElements.chapterContent.scrollTop = 0;
-        this.currentPosition = 0;
-    }
-
-    /**
-     * Update active chapter in table of contents
-     */
-    updateActiveChapter(index) {
-        document.querySelectorAll('.chapter-item').forEach((el, i) => {
-            el.classList.toggle('active', i === index);
+        
+        // Update active chapter in sidebar
+        document.querySelectorAll('.chapter-item').forEach((item, index) => {
+            item.classList.toggle('active', index === chapterIndex);
         });
+        
+        // Restore scroll position
+        this.restoreScrollPosition();
+        
+        // Update progress
+        this.updateProgress();
+        
+        // Save progress
+        this.saveProgress();
     }
 
     /**
-     * Update UI elements based on current state
+     * Navigate to previous chapter
      */
-    updateUI() {
-        // Update chapter progress
-        if (this.chapterProgressElement && this.novelData?.chapters) {
-            const progress = Math.round((this.currentChapter + 1) / this.novelData.chapters.length * 100);
-            this.chapterProgressElement.style.width = progress + '%';
+    previousChapter() {
+        if (this.currentChapter > 0) {
+            this.displayChapter(this.currentChapter - 1);
         }
     }
 
-    // Event handlers
-    handleChapterClick(event) {
-        event.preventDefault();
-        const target = event.target;
-        if (target.classList.contains('chapter-link')) {
-            const chapterIndex = parseInt(target.dataset.chapter);
-            this.goToChapter(chapterIndex);
+    /**
+     * Navigate to next chapter
+     */
+    nextChapter() {
+        if (this.novelData && this.currentChapter < this.novelData.chapters.length - 1) {
+            this.displayChapter(this.currentChapter + 1);
         }
     }
 
+    /**
+     * Toggle sidebar visibility
+     */
     toggleSidebar() {
         this.domElements.sidebar.classList.toggle('show');
     }
 
-    // Theme and font settings
-    setTheme(theme) {
-        if (!CONFIG.THEMES.includes(theme)) return;
+    /**
+     * Update reading progress
+     */
+    updateProgress() {
+        const content = this.domElements.chapterContent;
+        if (!content) return;
 
-        this.settings.theme = theme;
-        document.documentElement.classList.remove(`theme-${this.settings.theme}`);
-        document.documentElement.classList.add(`theme-${theme}`);
-        this.saveSettings();
-    }
-
-    setFont(font) {
-        if (!CONFIG.FONTS.includes(font)) return;
-
-        this.settings.font = font;
-        document.documentElement.classList.remove(`font-${this.settings.font}`);
-        document.documentElement.classList.add(`font-${font}`);
-        this.saveSettings();
-    }
-
-    setFontSize(size) {
-        size = Math.max(12, Math.min(24, parseInt(size)));
-        this.settings.fontSize = size;
-        document.documentElement.style.setProperty('--reader-font-size', `${size}px`);
-        this.domElements.fontSizeLabel.textContent = `${size}px`;
-        this.saveSettings();
+        const scrollTop = content.scrollTop;
+        const scrollHeight = content.scrollHeight - content.clientHeight;
+        
+        if (scrollHeight > 0) {
+            this.currentPosition = scrollTop / scrollHeight;
+            const percentage = Math.round(this.currentPosition * 100);
+            
+            this.domElements.chapterProgressBar.style.width = `${percentage}%`;
+            this.domElements.chapterProgressBar.setAttribute('aria-valuenow', percentage);
+            this.domElements.chapterProgress.style.display = 'block';
+        }
     }
 
     /**
-     * Apply current settings to the interface
+     * Handle scroll events
      */
-    applySettings() {
-        this.setTheme(this.settings.theme);
-        this.setFont(this.settings.font);
-        this.setFontSize(this.settings.fontSize);
-
-        const { fontSizeSlider, fontSizeLabel } = this.domElements;
-        fontSizeSlider.value = this.settings.fontSize;
-        fontSizeLabel.textContent = `${this.settings.fontSize}px`;
+    handleScroll() {
+        this.debounce(() => {
+            this.updateProgress();
+            this.saveProgress();
+        }, CONFIG.DEBOUNCE_DELAY);
     }
 
-    // Scroll and position tracking
-    handleScroll(event) {
-        this.debounce(this.handleScrollDebounced.bind(this), CONFIG.DEBOUNCE_DELAY);
-    }
-
-    handleScrollDebounced() {
-        const { scrollTop, scrollHeight, clientHeight } = this.domElements.chapterContent;
-        const progress = scrollHeight > clientHeight
-            ? Math.round(scrollTop / (scrollHeight - clientHeight) * 10000) / 10000 // High precision
-            : 0;
-
-        this.currentPosition = progress;
-        this.saveReadingProgress();
-    }
-
-    // Keyboard navigation
-    handleKeyboard(event) {
-        if (!this.novelData || event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-            return;
-        }
-
-        switch(event.key.toLowerCase()) {
-            case 'arrowleft':
-            case 'a':
-            case 'h':
-                event.preventDefault();
-                this.goToChapter(this.currentChapter - 1);
-                break;
-            case 'arrowright':
-            case 'd':
-            case 'l':
-                event.preventDefault();
-                this.goToChapter(this.currentChapter + 1);
-                break;
-            case ' ':
-            case 'pagedown':
-            case 'j':
-                event.preventDefault();
-                this.scrollDown();
-                break;
-            case 'pageup':
-            case 'k':
-                event.preventDefault();
-                this.scrollUp();
-                break;
-            case 'home':
-                event.preventDefault();
-                this.goToBeginning();
-                break;
-            case 'end':
-                event.preventDefault();
-                this.goToEnd();
-                break;
-            case 'b':
-            case 'f2':
-                event.preventDefault();
-                this.toggleBookmark();
-                break;
-            case 'escape':
-                event.preventDefault();
-                this.closeOverlays();
-                break;
-            case '/':
-            case 'f':
-                if (!event.ctrlKey && !event.metaKey) {
-                    event.preventDefault();
-                    this.focusSearch();
-                }
-                break;
-        }
-    }
-
-    scrollDown() {
-        this.smoothScroll(0.8);
-    }
-
-    scrollUp() {
-        this.smoothScroll(-0.8);
-    }
-
-    smoothScroll(factor) {
-        const content = this.domElements.chapterContent;
-        content.scrollBy({
-            top: content.clientHeight * factor,
-            behavior: 'smooth'
-        });
-    }
-
-    goToBeginning() {
-        this.domElements.chapterContent.scrollTop = 0;
-        this.currentPosition = 0;
-        this.saveReadingProgress();
-    }
-
-    goToEnd() {
-        const content = this.domElements.chapterContent;
-        content.scrollTop = content.scrollHeight - content.clientHeight;
-        this.currentPosition = 1;
-        this.saveReadingProgress();
-    }
-
-    toggleBookmark() {
-        const bookmarkId = `${this.currentChapter}-${Date.now()}`;
-        const existingBookmark = this.bookmarks.find(b =>
-            b.chapter === this.currentChapter
-        );
-
-        if (existingBookmark) {
-            this.bookmarks = this.bookmarks.filter(b => b.id !== existingBookmark.id);
-            this.showNotification(MESSAGES.BOOKMARK_REMOVED);
-        } else {
-            this.bookmarks.push({
-                id: bookmarkId,
-                title: this.novelData.chapters[this.currentChapter].title,
-                chapter: this.currentChapter,
-                position: this.currentPosition,
-                timestamp: new Date().toISOString()
-            });
-            this.showNotification(MESSAGES.BOOKMARK_ADDED);
-        }
-
-        this.saveBookmarks();
-    }
-
-    focusSearch() {
-        this.showNotification(MESSAGES.SEARCH_NOT_IMPLEMENTED);
-    }
-
-    closeOverlays() {
-        this.domElements.sidebar.classList.remove('show');
-    }
-
-    // Export functionality
-    exportNovel() {
-        if (!this.novelData) {
-            this.showNotification(MESSAGES.NO_NOVEL_LOADED);
-            return;
-        }
-
-        try {
-            const exportData = this.generateExportHTML();
-            const blob = new Blob([exportData], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${this.novelData.title.replace(/[^a-z0-9]/gi, '_')}_enhanced.html`;
-            a.click();
-
-            URL.revokeObjectURL(url);
-            this.showNotification(MESSAGES.EXPORT_SUCCESS);
-        } catch (error) {
-            console.error('Export error:', error);
-            this.showNotification(MESSAGES.EXPORT_FAILED);
-        }
-    }
-
-    generateExportHTML() {
-        if (!this.novelData?.chapters) return;
-
-        const chapterCount = this.novelData.chapters.length;
-        let html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${this.novelData.title} - Enhanced Reading</title>
-    <style>
-        body { max-width: 800px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; line-height: 1.6; }
-        .chapter { margin: 2rem 0; }
-        .chapter h2 { margin-top: 0; color: #333; }
-        .chapter div { margin: 1rem 0; }
-        hr { border: none; border-top: 1px solid #ccc; margin: 2rem 0; }
-        .nav { text-align: center; margin: 2rem 0; }
-        .nav button { margin: 0 1rem; padding: 0.5rem 1rem; }
-    </style>
-</head>
-<body>
-    <h1 style="text-align: center;">${this.novelData.title}</h1>
-    <div style="text-align: center; margin: 1rem 0; color: #666;"><em>Enhanced for reading by Novel Reader</em><br>Export date: ${new Date().toLocaleDateString()}</div>`;
-
-        this.novelData.chapters.forEach((chapter, i) => {
-            html += `
-    <div class="chapter" id="chapter-${i+1}">
-        <h2>${chapter.title}</h2>
-        <div style="font-size: ${this.settings.fontSize}px;">${chapter.content}</div>`;
-            if (i < chapterCount - 1) {
-                html += `\n        <hr>`;
-            }
-            html += `\n    </div>`;
-        });
-
-        html += `
-    <div class="nav">
-        <button onclick="scrollToChapter(-1)">Previous</button>
-        <span id="current-chapter"> Chapter 1 of ${chapterCount} </span>
-        <button onclick="scrollToChapter(1)">Next</button>
-    </div>
-    <script>
-let currentChapterIndex = 0;
-const chapters = document.querySelectorAll(".chapter");
-function scrollToChapter(direction) {
-    const newIndex = currentChapterIndex + direction;
-    if (newIndex >= 0 && newIndex < chapters.length) {
-        currentChapterIndex = newIndex;
-        chapters[currentChapterIndex].scrollIntoView({ behavior: "smooth" });
-        document.getElementById("current-chapter").textContent = " Chapter " + (currentChapterIndex + 1) + " of " + chapters.length + " ";
-    }
-}
-document.getElementById("current-chapter").textContent = " Chapter 1 of " + chapters.length + " ";
-    </script>
-</body>
-</html>`;
-
-        return html;
-    }
-
-    // Storage methods
-    loadSettings() {
-        const defaultSettings = {
-            theme: 'light',
-            font: 'serif',
-            fontSize: 18
-        };
-
-        try {
-            const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SETTINGS);
-            return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-        } catch (error) {
-            console.warn('Failed to load settings:', error);
-            return defaultSettings;
-        }
-    }
-
-    saveSettings() {
-        try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
-        } catch (error) {
-            console.error('Failed to save settings:', error);
-        }
-    }
-
-    saveReadingProgress() {
-        if (!this.novelData) return;
-
-        const progress = {
-            novel: this.novelData.title,
-            chapter: this.currentChapter,
-            position: this.currentPosition,
-            timestamp: new Date().toISOString()
-        };
-
-        try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
-        } catch (error) {
-            console.error('Failed to save reading progress:', error);
-        }
-    }
-
-    loadReadingProgress() {
-        try {
-            const progress = localStorage.getItem(CONFIG.STORAGE_KEYS.PROGRESS);
-            if (progress) {
-                const data = JSON.parse(progress);
-                if (data.novel === this.novelData?.title) {
-                    this.currentChapter = data.chapter || 0;
-                    this.currentPosition = data.position || 0;
-                    this.goToChapter(this.currentChapter);
-                    if (this.currentPosition > 0) {
-                        this.restoreScrollPosition();
-                    }
-                }
-            }
-        } catch (error) {
-            console.warn('Failed to load reading progress:', error);
-        }
-    }
-
+    /**
+     * Restore scroll position
+     */
     restoreScrollPosition() {
         if (this.currentPosition > 0) {
             const content = this.domElements.chapterContent;
@@ -707,6 +459,158 @@ document.getElementById("current-chapter").textContent = " Chapter 1 of " + chap
         }
     }
 
+    /**
+     * Handle keyboard shortcuts
+     */
+    handleKeyboard(event) {
+        if (!this.novelData) return;
+
+        // Only handle shortcuts when reader is active
+        if (this.domElements.readerSection.classList.contains('hidden')) {
+            return;
+        }
+
+        switch (event.key) {
+            case 'ArrowLeft':
+                event.preventDefault();
+                this.previousChapter();
+                break;
+            case 'ArrowRight':
+                event.preventDefault();
+                this.nextChapter();
+                break;
+            case 'b':
+                if (event.ctrlKey || event.metaKey) {
+                    event.preventDefault();
+                    this.toggleBookmark();
+                }
+                break;
+            case 's':
+                if (event.ctrlKey || event.metaKey) {
+                    event.preventDefault();
+                    this.showNotification('Progress saved');
+                }
+                break;
+        }
+    }
+
+    /**
+     * Load settings from localStorage
+     */
+    loadSettings() {
+        try {
+            const settings = localStorage.getItem(CONFIG.STORAGE_KEYS.SETTINGS);
+            return settings ? JSON.parse(settings) : {
+                theme: 'light',
+                font: 'serif',
+                fontSize: 18
+            };
+        } catch (error) {
+            console.warn('Failed to load settings:', error);
+            return {
+                theme: 'light',
+                font: 'serif',
+                fontSize: 18
+            };
+        }
+    }
+
+    /**
+     * Save settings to localStorage
+     */
+    saveSettings() {
+        try {
+            localStorage.setItem(CONFIG.STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
+        } catch (error) {
+            console.error('Failed to save settings:', error);
+        }
+    }
+
+    /**
+     * Apply saved settings
+     */
+    applySettings() {
+        this.setTheme(this.settings.theme);
+        this.setFont(this.settings.font);
+        this.updateFontSize(this.settings.fontSize);
+    }
+
+    /**
+     * Set theme
+     */
+    setTheme(theme) {
+        if (!CONFIG.THEMES.includes(theme)) return;
+
+        this.settings.theme = theme;
+        this.domElements.novelReader.className = `novel-reader theme-${theme} font-${this.settings.font}`;
+        this.saveSettings();
+    }
+
+    /**
+     * Set font family
+     */
+    setFont(font) {
+        if (!CONFIG.FONTS.includes(font)) return;
+
+        this.settings.font = font;
+        this.domElements.novelReader.className = `novel-reader theme-${this.settings.theme} font-${font}`;
+        this.saveSettings();
+    }
+
+    /**
+     * Update font size
+     */
+    updateFontSize(size) {
+        this.settings.fontSize = parseInt(size);
+        document.documentElement.style.setProperty('--reader-font-size', `${size}px`);
+        this.domElements.fontSizeLabel.textContent = `${size}px`;
+        this.saveSettings();
+    }
+
+    /**
+     * Save reading progress
+     */
+    saveProgress() {
+        if (!this.novelData) return;
+
+        try {
+            const progress = {
+                novelTitle: this.novelData.title,
+                currentChapter: this.currentChapter,
+                currentPosition: this.currentPosition,
+                timestamp: Date.now()
+            };
+            
+            localStorage.setItem(CONFIG.STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
+        } catch (error) {
+            console.error('Failed to save progress:', error);
+        }
+    }
+
+    /**
+     * Load reading progress
+     */
+    loadProgress() {
+        try {
+            const progress = localStorage.getItem(CONFIG.STORAGE_KEYS.PROGRESS);
+            if (progress) {
+                const data = JSON.parse(progress);
+                if (data.novelTitle === this.novelData.title) {
+                    this.currentChapter = data.currentChapter || 0;
+                    this.currentPosition = data.currentPosition || 0;
+                    return true;
+                }
+            }
+            return false;
+        } catch (error) {
+            console.warn('Failed to load progress:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Save bookmarks
+     */
     saveBookmarks() {
         try {
             localStorage.setItem(CONFIG.STORAGE_KEYS.BOOKMARKS, JSON.stringify(this.bookmarks));
@@ -715,6 +619,9 @@ document.getElementById("current-chapter").textContent = " Chapter 1 of " + chap
         }
     }
 
+    /**
+     * Load bookmarks
+     */
     loadBookmarks() {
         try {
             const bookmarks = localStorage.getItem(CONFIG.STORAGE_KEYS.BOOKMARKS);
@@ -725,9 +632,97 @@ document.getElementById("current-chapter").textContent = " Chapter 1 of " + chap
         }
     }
 
+    /**
+     * Toggle bookmark for current chapter
+     */
+    toggleBookmark() {
+        if (!this.novelData) {
+            this.showNotification(MESSAGES.NO_NOVEL_LOADED);
+            return;
+        }
+
+        const bookmarkIndex = this.bookmarks.findIndex(
+            b => b.novelTitle === this.novelData.title && b.chapterIndex === this.currentChapter
+        );
+
+        if (bookmarkIndex >= 0) {
+            this.bookmarks.splice(bookmarkIndex, 1);
+            this.showNotification(MESSAGES.BOOKMARK_REMOVED);
+        } else {
+            this.bookmarks.push({
+                novelTitle: this.novelData.title,
+                chapterIndex: this.currentChapter,
+                chapterTitle: this.novelData.chapters[this.currentChapter].title,
+                timestamp: Date.now()
+            });
+            this.showNotification(MESSAGES.BOOKMARK_ADDED);
+        }
+
+        this.saveBookmarks();
+    }
+
+    /**
+     * Show reader interface
+     */
+    showReaderInterface() {
+        this.domElements.uploadSection.classList.add('hidden');
+        this.domElements.readerSection.classList.remove('hidden');
+        
+        // Load progress if available
+        this.loadProgress();
+    }
+
+    /**
+     * Export novel
+     */
+    exportNovel() {
+        if (!this.novelData) {
+            this.showNotification(MESSAGES.NO_NOVEL_LOADED);
+            return;
+        }
+
+        try {
+            const exportData = {
+                novel: this.novelData,
+                bookmarks: this.bookmarks.filter(b => b.novelTitle === this.novelData.title),
+                progress: {
+                    currentChapter: this.currentChapter,
+                    currentPosition: this.currentPosition
+                },
+                exportDate: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${this.novelData.title}-export.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showNotification(MESSAGES.EXPORT_SUCCESS);
+        } catch (error) {
+            this.handleError(error, 'Export');
+            this.showNotification(MESSAGES.EXPORT_FAILED);
+        }
+    }
+
+    /**
+     * Escape HTML entities
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     // Utility methods
     showLoadingState(message = 'Processing...') {
-        // Show loading indicator
         const progressContainer = document.querySelector('.progress-container');
         const progressText = document.getElementById('progressText');
         if (progressContainer) {
