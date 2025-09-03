@@ -66,6 +66,7 @@ class NovelReader {
         this.settings = this.loadSettings();
         this.domElements = this.cacheDOMElements();
         this.scrollTimeout = null;
+        this.autoAdvanceTimeout = null;
         this.isInitialized = false;
 
         this.init();
@@ -94,23 +95,15 @@ class NovelReader {
             fontSizeSlider: document.getElementById('fontSizeSlider'),
             fontSizeLabel: document.getElementById('fontSizeLabel'),
             themeButtons: document.querySelectorAll('[data-theme]'),
-            fontButtons: document.querySelectorAll('[data-font]')
+            fontButtons: document.querySelectorAll('[data-font]'),
+            // End-of-chapter indicator elements
+            chapterEndIndicator: document.getElementById('chapterEndIndicator'),
+            currentChapterInfo: document.getElementById('currentChapterInfo'),
+            nextChapterInfo: document.getElementById('nextChapterInfo'),
+            manualAdvanceBtn: document.getElementById('manualAdvanceBtn'),
+            advanceText: document.getElementById('advanceText'),
+            indicatorContent: document.querySelector('.indicator-content')
         };
-    }
-
-    /**
-     * Initialize the application
-     */
-    async init() {
-        try {
-            this.setupEventListeners();
-            this.loadBookmarks();
-            this.applySettings();
-            this.isInitialized = true;
-            console.info('Novel Reader initialized successfully');
-        } catch (error) {
-            this.handleError(error, 'Initialization');
-        }
     }
 
     /**
@@ -146,6 +139,126 @@ class NovelReader {
 
         // Window events
         window.addEventListener('beforeunload', () => this.saveProgress());
+    }
+
+    /**
+     * Initialize the application
+     */
+    async init() {
+        try {
+            this.setupEventListeners();
+            this.loadBookmarks();
+            this.applySettings();
+            this.isInitialized = true;
+            console.info('Novel Reader initialized successfully');
+        } catch (error) {
+            this.handleError(error, 'Initialization');
+        }
+    }
+
+    /**
+     * Display a specific chapter
+     */
+    displayChapter(chapterIndex) {
+        if (!this.novelData || chapterIndex < 0 || chapterIndex >= this.novelData.chapters.length) {
+            return;
+        }
+
+        this.currentChapter = chapterIndex;
+        const chapter = this.novelData.chapters[chapterIndex];
+
+        // Update UI
+        this.domElements.chapterTitle.textContent = chapter.title;
+
+        // Add next chapter button to content if not last chapter
+        let contentWithButton = chapter.content;
+        if (this.currentChapter < this.novelData.chapters.length - 1) {
+            const nextChapter = this.novelData.chapters[this.currentChapter + 1];
+            const buttonHtml = `
+                <div class="chapter-end-button-container">
+                    <button class="chapter-end-nav-btn" id="chapterEndNavBtn">
+                        <span class="chapter-end-text">Next Chapter: ${this.escapeHtml(nextChapter.title)}</span>
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+            `;
+            contentWithButton += buttonHtml;
+        } else {
+            // Last chapter - different message
+            const lastChapterButton = `
+                <div class="chapter-end-button-container">
+                    <button class="chapter-end-nav-btn last-chapter" id="lastChapterBtn">
+                        <span class="chapter-end-text">End of Book - Return to Chapters</span>
+                        <i class="fas fa-list" aria-hidden="true"></i>
+                    </button>
+                </div>
+            `;
+            contentWithButton += lastChapterButton;
+        }
+
+        this.domElements.chapterContent.innerHTML = contentWithButton;
+
+        // Add event listener to the button after content is loaded
+        const navBtn = this.domElements.chapterContent.querySelector('#chapterEndNavBtn, #lastChapterBtn');
+        if (navBtn) {
+            navBtn.addEventListener('click', () => this.handleChapterEndNavigation());
+        }
+
+        // Update active chapter in sidebar
+        document.querySelectorAll('.chapter-item').forEach((item, index) => {
+            item.classList.toggle('active', index === chapterIndex);
+        });
+
+        // Restore scroll position
+        this.restoreScrollPosition();
+
+        // Update progress
+        this.updateProgress();
+
+        // Save progress
+        this.saveProgress();
+
+        // Initialize chapter end tracking
+        this.checkForChapterEndButton();
+    }
+
+    /**
+     * Handle navigation from chapter end button - direct DOM scrolling approach
+     */
+    handleChapterEndNavigation() {
+        if (!this.novelData) return;
+
+        const isLastChapter = this.currentChapter >= this.novelData.chapters.length - 1;
+
+        if (isLastChapter) {
+            // Show sidebar for last chapter
+            this.showNotification('You\'ve reached the end of the book!');
+            this.domElements.sidebar.classList.add('show');
+        } else {
+            // Advance to next chapter with guaranteed scroll-to-top
+            this.nextChapterDirect();
+            this.showNotification('Moved to next chapter');
+        }
+    }
+
+    /**
+     * Check if user is near chapter end to show additional navigation options
+     */
+    checkForChapterEndButton() {
+        // This method could be extended for additional logic if needed
+        const navBtn = this.domElements.chapterContent.querySelector('#chapterEndNavBtn, #lastChapterBtn');
+        if (navBtn) {
+            // Add smooth scroll to button when user gets close to bottom
+            const rect = navBtn.getBoundingClientRect();
+            const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+
+            if (isVisible) {
+                navBtn.style.animation = 'highlight 1s ease-in-out';
+                setTimeout(() => {
+                    navBtn.style.animation = '';
+                }, 1000);
+            }
+        }
     }
 
     /**
@@ -364,36 +477,6 @@ class NovelReader {
     }
 
     /**
-     * Display a specific chapter
-     */
-    displayChapter(chapterIndex) {
-        if (!this.novelData || chapterIndex < 0 || chapterIndex >= this.novelData.chapters.length) {
-            return;
-        }
-
-        this.currentChapter = chapterIndex;
-        const chapter = this.novelData.chapters[chapterIndex];
-        
-        // Update UI
-        this.domElements.chapterTitle.textContent = chapter.title;
-        this.domElements.chapterContent.innerHTML = chapter.content;
-        
-        // Update active chapter in sidebar
-        document.querySelectorAll('.chapter-item').forEach((item, index) => {
-            item.classList.toggle('active', index === chapterIndex);
-        });
-        
-        // Restore scroll position
-        this.restoreScrollPosition();
-        
-        // Update progress
-        this.updateProgress();
-        
-        // Save progress
-        this.saveProgress();
-    }
-
-    /**
      * Navigate to previous chapter
      */
     previousChapter() {
@@ -403,7 +486,92 @@ class NovelReader {
     }
 
     /**
-     * Navigate to next chapter
+     * Navigate to next chapter with direct DOM scrolling approach
+     */
+    nextChapterDirect() {
+        if (!this.novelData || this.currentChapter >= this.novelData.chapters.length - 1) {
+            return;
+        }
+
+        // Move to next chapter
+        this.currentChapter++;
+
+        // Display chapter with guaranteed scroll-to-top
+        this.displayChapterWithScrollToTop(this.currentChapter);
+    }
+
+    /**
+     * Display chapter with guaranteed scroll-to-top using reliable timing
+     */
+    displayChapterWithScrollToTop(chapterIndex) {
+        if (!this.novelData || chapterIndex < 0 || chapterIndex >= this.novelData.chapters.length) {
+            return;
+        }
+
+        this.currentChapter = chapterIndex;
+        const chapter = this.novelData.chapters[chapterIndex];
+
+        // Update UI
+        this.domElements.chapterTitle.textContent = chapter.title;
+
+        // Add next chapter button to content
+        let contentWithButton = chapter.content;
+        if (this.currentChapter < this.novelData.chapters.length - 1) {
+            const nextChapter = this.novelData.chapters[this.currentChapter + 1];
+            const buttonHtml = `
+                <div class="chapter-end-button-container">
+                    <button class="chapter-end-nav-btn" id="chapterEndNavBtn">
+                        <span class="chapter-end-text">Next Chapter: ${this.escapeHtml(nextChapter.title)}</span>
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+            `;
+            contentWithButton += buttonHtml;
+        } else {
+            // Last chapter
+            const lastChapterButton = `
+                <div class="chapter-end-button-container">
+                    <button class="chapter-end-nav-btn last-chapter" id="lastChapterBtn">
+                        <span class="chapter-end-text">End of Book - Return to Chapters</span>
+                        <i class="fas fa-list" aria-hidden="true"></i>
+                    </button>
+                </div>
+            `;
+            contentWithButton += lastChapterButton;
+        }
+
+        // Update content
+        this.domElements.chapterContent.innerHTML = contentWithButton;
+
+        // Use requestAnimationFrame + setTimeout for guaranteed DOM completion
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                // Force scroll to top - this will override any progress loading
+                this.domElements.chapterContent.scrollTop = 0;
+
+                // Add event listener to the button
+                const navBtn = this.domElements.chapterContent.querySelector('#chapterEndNavBtn, #lastChapterBtn');
+                if (navBtn) {
+                    navBtn.addEventListener('click', () => this.handleChapterEndNavigation());
+                }
+
+                // Update sidebar
+                document.querySelectorAll('.chapter-item').forEach((item, index) => {
+                    item.classList.toggle('active', index === chapterIndex);
+                });
+
+                // Update progress and save
+                this.updateProgress();
+                this.saveProgress();
+
+                // Initialize chapter end tracking
+                this.checkForChapterEndButton();
+            }, 10);
+        });
+    }
+
+    /**
+     * Regular next chapter method for non-manual navigation
      */
     nextChapter() {
         if (this.novelData && this.currentChapter < this.novelData.chapters.length - 1) {
@@ -445,18 +613,59 @@ class NovelReader {
         this.debounce(() => {
             this.updateProgress();
             this.saveProgress();
+            this.checkAutoAdvance();
         }, CONFIG.DEBOUNCE_DELAY);
+    }
+
+    /**
+     * Check if should auto-advance to next chapter
+     */
+    checkAutoAdvance() {
+        if (!this.novelData || this.currentChapter >= this.novelData.chapters.length - 1) {
+            return; // No novel loaded or at last chapter
+        }
+
+        const content = this.domElements.chapterContent;
+        const scrollTop = content.scrollTop;
+        const clientHeight = content.clientHeight;
+        const scrollHeight = content.scrollHeight;
+        const threshold = 100; // pixels from bottom
+
+        if (scrollTop + clientHeight >= scrollHeight - threshold) {
+            // Auto-advance after a short delay to prevent accidental triggers
+            if (this.autoAdvanceTimeout) {
+                clearTimeout(this.autoAdvanceTimeout);
+            }
+            this.autoAdvanceTimeout = setTimeout(() => {
+                if (this.currentChapter < this.novelData.chapters.length - 1) {
+                    this.nextChapter();
+                    this.showNotification('Auto-advanced to next chapter');
+                }
+                this.autoAdvanceTimeout = null;
+            }, 500);
+        } else {
+            // Cancel pending auto-advance if user scrolls up
+            if (this.autoAdvanceTimeout) {
+                clearTimeout(this.autoAdvanceTimeout);
+                this.autoAdvanceTimeout = null;
+            }
+        }
     }
 
     /**
      * Restore scroll position
      */
     restoreScrollPosition() {
+        const content = this.domElements.chapterContent;
+
         if (this.currentPosition > 0) {
-            const content = this.domElements.chapterContent;
-            const maxScroll = content.scrollHeight - content.clientHeight;
-            content.scrollTop = maxScroll * this.currentPosition;
+            // Restore saved scroll position for resuming reading
+            setTimeout(() => {
+                const maxScroll = content.scrollHeight - content.clientHeight;
+                content.scrollTop = maxScroll * this.currentPosition;
+            }, 10);
         }
+        // If currentPosition is 0, scrollTop remains 0 (top of page)
     }
 
     /**
@@ -596,6 +805,7 @@ class NovelReader {
             if (progress) {
                 const data = JSON.parse(progress);
                 if (data.novelTitle === this.novelData.title) {
+                    // Restore both chapter and position for normal bookmark/resume functionality
                     this.currentChapter = data.currentChapter || 0;
                     this.currentPosition = data.currentPosition || 0;
                     return true;
@@ -762,6 +972,8 @@ class NovelReader {
         clearTimeout(this.scrollTimeout);
         this.scrollTimeout = setTimeout(func, wait);
     }
+
+
 
     // Error handling
     handleError(error, context = 'Unknown') {
