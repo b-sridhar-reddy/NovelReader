@@ -1,0 +1,407 @@
+/* Novel Reader Styles */
+
+:root {
+    --reader-font-size: 18px;
+    --reader-font-family: 'Source Serif 4', serif;
+    --reader-line-height: 1.6;
+    --reader-bg-color: #ffffff;
+    --reader-text-color: #333333;
+    --reader-control-bg: #f8f9fa;
+    --reader-control-text: #495057;
+    --reader-border-color: #dee2e6;
+    --reader-primary-color: #007bff;
+    --reader-muted-color: #6c757d;
+    --reader-transition: all 0.3s ease;
+}
+
+/* Main container */
+.novel-reader {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header styles */
+.reader-header {
+    background: var(--reader-control-bg);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--reader-border-color);
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.reader-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* Control buttons */
+.btn-control {
+    border: none;
+    background: transparent;
+    color: var(--reader-control-text);
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: var(--reader-transition);
+    cursor: pointer;
+}
+
+.btn-control:hover {
+    background: rgba(0,0,0,0.1);
+    transform: scale(1.05);
+}
+
+/* Main content area */
+.reader-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background: var(--reader-bg-color);
+}
+
+/* Sidebar (Table of Contents) */
+.reader-sidebar {
+    width: 300px;
+    background: var(--reader-control-bg);
+    border-right: 1px solid var(--reader-border-color);
+    overflow-y: auto;
+    transition: var(--reader-transition);
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+.reader-sidebar .p-3 {
+    padding: 1rem;
+}
+
+.chapter-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.chapter-item {
+    border-bottom: 1px solid #eef0f1;
+    transition: var(--reader-transition);
+}
+
+.chapter-item.active {
+    background: var(--reader-primary-color);
+    color: white;
+    box-shadow: inset 4px 0 0 rgba(255,255,255,0.3);
+}
+
+.chapter-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: var(--reader-transition);
+    border-radius: 0.25rem;
+    margin: 0.125rem;
+}
+
+.chapter-link:hover {
+    background: rgba(0,0,0,0.05);
+    transform: translateX(5px);
+}
+
+.chapter-item.active .chapter-link {
+    background: transparent;
+    color: inherit;
+}
+
+/* Content area */
+.reader-content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--reader-bg-color);
+}
+
+.reader-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    font-size: var(--reader-font-size);
+    font-family: var(--reader-font-family);
+    line-height: var(--reader-line-height);
+    color: var(--reader-text-color);
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    scroll-behavior: smooth;
+}
+
+/* Chapter title and progress */
+#chapterTitle {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: var(--reader-text-color);
+}
+
+.chapter-progress {
+    display: none;
+    margin-top: 0.5rem;
+}
+
+.chapter-progress .progress {
+    height: 3px;
+    background: var(--reader-control-bg);
+}
+
+.chapter-progress .progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* File upload section */
+#uploadSection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: var(--reader-bg-color);
+    text-align: center;
+}
+
+#uploadSection h1 {
+    color: var(--reader-text-color);
+    margin-bottom: 2rem;
+    font-size: 2rem;
+}
+
+.file-upload-area {
+    border: 2px dashed var(--reader-border-color);
+    border-radius: 12px;
+    padding: 3rem 2rem;
+    text-align: center;
+    background: #fafafa;
+    transition: var(--reader-transition);
+    cursor: pointer;
+    margin: 2rem auto;
+    max-width: 600px;
+    position: relative;
+}
+
+.file-upload-area:hover,
+.file-upload-area.dragover {
+    border-color: var(--reader-primary-color);
+    background: #f8f9ff;
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.file-upload-area i {
+    font-size: 4rem;
+    color: var(--reader-muted-color);
+    margin-bottom: 1.5rem;
+    transition: var(--reader-transition);
+}
+
+.file-upload-area:hover i {
+    color: var(--reader-primary-color);
+    transform: scale(1.1);
+}
+
+.file-upload-area h3 {
+    color: var(--reader-text-color);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.file-upload-area p {
+    color: var(--reader-muted-color);
+    margin: 0;
+}
+
+/* Progress indicators */
+.progress-container {
+    display: none;
+    width: 100%;
+    max-width: 400px;
+}
+
+.progress-container.show {
+    display: block;
+}
+
+.progress-bar {
+    height: 4px;
+    background: var(--reader-control-bg);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar .progress-bar {
+    background: linear-gradient(90deg, #28a745, #20c997);
+    transition: width 0.3s ease;
+    border-radius: 2px;
+}
+
+#progressText {
+    color: var(--reader-muted-color);
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+/* Reading themes */
+.theme-light {
+    --reader-bg-color: #ffffff;
+    --reader-text-color: #333333;
+    --reader-control-bg: #f8f9fa;
+    --reader-control-text: #495057;
+}
+
+.theme-dark {
+    --reader-bg-color: #1a1a1a;
+    --reader-text-color: #e0e0e0;
+    --reader-control-bg: #2d2d2d;
+    --reader-control-text: #e0e0e0;
+    --reader-border-color: #404040;
+}
+
+.theme-sepia {
+    --reader-bg-color: #f4ecd8;
+    --reader-text-color: #5b4636;
+    --reader-control-bg: #ede0d4;
+    --reader-control-text: #875a3c;
+    --reader-border-color: #c9b8a0;
+}
+
+/* Font families */
+.font-serif { --reader-font-family: 'Source Serif 4', serif; }
+.font-sans { --reader-font-family: 'Inter', sans-serif; }
+.font-mono { --reader-font-family: 'Monaco', 'Menlo', monospace; }
+
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+.btn-primary {
+    background: var(--reader-primary-color);
+    border: 1px solid var(--reader-primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+    border-color: #004085;
+}
+
+/* Notifications */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--reader-control-bg);
+    border: 1px solid var(--reader-text-color);
+    color: var(--reader-text-color);
+    padding: 0.75rem 1.25rem;
+    border-radius: 6px;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    font-weight: 500;
+    animation: fadeIn 0.3s ease-out;
+    max-width: 300px;
+    word-wrap: break-word;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .reader-sidebar {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        width: 250px;
+        height: calc(100vh - 60px);
+        transform: translateX(-100%);
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .reader-sidebar.show {
+        transform: translateX(0);
+    }
+
+    .reader-content {
+        padding: 1rem;
+    }
+
+    .reader-header {
+        padding: 0.5rem;
+    }
+
+    .file-upload-area {
+        padding: 2rem 1.5rem;
+        margin: 1rem;
+        margin-top: 3rem;
+    }
+
+    .file-upload-area i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .file-upload-area h3 {
+        font-size: 1.25rem;
+    }
+
+    #uploadSection h1 {
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .reader-content {
+        padding: 0.75rem;
+        font-size: 16px;
+    }
+
+    .reader-controls {
+        gap: 0.5rem;
+    }
+
+    .btn-control {
+        padding: 0.375rem;
+    }
+
+    .reader-sidebar {
+        width: 220px;
+    }
+}
+
+/* Custom scrollbar */
+.reader-content::-webkit-scrollbar,
+.reader-sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.reader-content::-webkit-scrollbar-track,
+.reader-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.reader-content::-webkit-scrollbar-thumb,
+.reader-sidebar::-webkit-scrollbar-thumb {
+    background: var(--reader-muted-color);
+    border-radius: 4px;
+}
+
+.reader-content::-webkit-scrollbar-thumb:hover,
+.reader-sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--reader-primary-color);
+}
